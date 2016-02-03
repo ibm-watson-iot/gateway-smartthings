@@ -50,6 +50,105 @@ After the setup is complete you should be able to see the application listed whe
 
 ![IBM Watson IoT Dashboard](https://raw.githubusercontent.com/ibm-watson-iot/gateway-smartthings/master/docs/dashboard.jpg "IBM Watson IoT Dashboard")
 
+### Events
+
+State updates are published to Watson IoT in real time and captured every 30 minutes even when no state changes have occured.  The events sent by any device are defined by it's capabilities.  Watson IoT eventId's match 1:1 with SmartThings capabilities, all events are sent in JSON format.  
+
+SmartThings often represents boolean (true or false) states as a string (e.g. on|off, active|inactive). The Watson IoT bridge converts these into simple boolean values to ease analytics and rule generation:
+
+- SmartThings acceleration state: ``active`` is converted to an acceleration event with value of ``true``
+- SmartThings contact state: ``closed`` is converted to a contact event with value of ``true``
+- SmartThings motion state: ``active`` is converted to a motion event with value of ``true``
+- SmartThings presence state: ``present`` is converted to a presence event with value of ``true``
+- SmartThings switch state: ``on`` is converted to a switch event with value of ``true``
+
+If a SmartThings device has multiple capabilities it will emit multiple events into Watson IoT.  For example, a multipurpose sensor will emit up to four different events based on the level of access granted to the bridge application: acceleration, battery, contact & temperature
+
+#### Acceleration Sensor Event
+- [SmartThings Capabilities Reference: Acceleration Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#acceleration-sensor)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "acceleration": true
+}
+```
+
+#### Battery Event
+- [SmartThings Capabilities Reference: Battery](http://docs.smartthings.com/en/latest/capabilities-reference.html#battery)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "battery": 0.83
+}
+```
+
+#### Contact Sensor Event
+- [SmartThings Capabilities Reference: Contact Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#contact-sensor)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "contact": true
+}
+```
+
+#### Motion Sensor Event
+- [SmartThings Capabilities Reference: Motion Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#motion-sensor)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "motion": true
+}
+```
+
+#### Power Meter Event
+- [SmartThings Capabilities Reference: Power Meter](http://docs.smartthings.com/en/latest/capabilities-reference.html#power-meter)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "power": 3.0
+}
+```
+
+#### Presence Sensor Event
+- [SmartThings Capabilities Reference: Presence Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#presence-sensor)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "presence": true
+}
+```
+
+#### Switch Event
+- [SmartThings Capabilities Reference: Switch](http://docs.smartthings.com/en/latest/capabilities-reference.html#switch)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "switch": true
+}
+```
+
+#### Temperature Measurement Event
+- [SmartThings Capabilities Reference: Temperature Measurement](http://docs.smartthings.com/en/latest/capabilities-reference.html#temperature-measurement)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "temperature": 15
+}
+```
+
+
+
+#### Three Axis Event
+- [SmartThings Capabilities Reference: Three Axis](http://docs.smartthings.com/en/latest/capabilities-reference.html#three-axis)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "x": 1,
+  "y": 50,
+  "z": 62
+}
+```
+
 ## What it doesn't do (Yet!)
 
 - Command control - The bridge only works one way right now, commands can not be sent to SmartThings through the Watson IoT Bridge yet
