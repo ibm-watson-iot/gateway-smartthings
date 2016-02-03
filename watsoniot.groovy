@@ -23,21 +23,22 @@ definition(
 preferences {
 	page(name: "watson_cfg", title: "Configure Target Organization", nextPage: "access_cfg", install:false) {
         section("Watson IoT Configuration ...") {
-        	input "watson_iot_org", title: "Organization ID", required: true
-            input "watson_iot_api_key", title: "API Key", required: true
-            input "watson_iot_api_token", title: "Authorization Token", required: true
+        	input(name: "watson_iot_org", title: "Organization ID", required: true)
+            input(name: "watson_iot_api_key", title: "API Key", required: true)
+            input(name: "watson_iot_api_token", title: "Authorization Token", required: true)
         }
     }
 	page(name: "access_cfg", title: "Configure Device Access", install:true) {
         section("Allow Watson IoT to Access These Things ...") {
-            input "d_switch", "capability.switch", title: "Switch", required: false, multiple: true
-            input "d_motion", "capability.motionSensor", title: "Motion", required: false, multiple: true
-            input "d_temperature", "capability.temperatureMeasurement", title: "Temperature", required: false, multiple: true
-            input "d_contact", "capability.contactSensor", title: "Contact", required: false, multiple: true
-            input "d_acceleration", "capability.accelerationSensor", title: "Acceleration", required: false, multiple: true
-            input "d_presence", "capability.presenceSensor", title: "Presence", required: false, multiple: true
-            input "d_battery", "capability.battery", title: "Battery", required: false, multiple: true
-            input "d_threeAxis", "capability.threeAxis", title: "3 Axis", required: false, multiple: true
+            input(name: "d_switch", type: "capability.switch", title: "Switch", required: false, multiple: true)
+            input(name: "d_meter", type: "capability.powerMeter", title: "Power Meter", required: false, multiple: true)
+            input(name: "d_motion", type: "capability.motionSensor", title: "Motion", required: false, multiple: true)
+            input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperature", required: false, multiple: true)
+            input(name: "d_contact", type: "capability.contactSensor", title: "Contact", required: false, multiple: true)
+            input(name: "d_acceleration", type: "capability.accelerationSensor", title: "Acceleration", required: false, multiple: true)
+            input(name: "d_presence", type: "capability.presenceSensor", title: "Presence", required: false, multiple: true)
+            input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
+            input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
         }
     }
 }
@@ -72,17 +73,11 @@ def initialize() {
 	// This will throw an error after the first time, but good enough for now...
     // TODO: Check if device type already registered
 	registerDeviceType()
-    
-	// Send current state to kick us off
-    for (type in getDeviceTypes()) {
-        for (device in type.value) {
-        	registerDeviceIfNotExists(device.id)
-        	def data = deviceStateToJson(device, type.key)
-            publishEvent(data)
-        }
-    }
-
+    	
+	syncEverything()
+	
     subscribe(d_switch, "switch", "onDeviceEvent")
+    subscribe(d_meter, "power", "onDeviceEvent")
 	subscribe(d_motion, "motion", "onDeviceEvent")
 	subscribe(d_temperature, "temperature", "onDeviceEvent")
 	subscribe(d_contact, "contact", "onDeviceEvent")
@@ -90,7 +85,26 @@ def initialize() {
 	subscribe(d_presence, "presence", "onDeviceEvent")
 	subscribe(d_battery, "battery", "onDeviceEvent")
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
+	
+	// Register the syncEverything() method to run every 30 minutes
+	runEvery30Minutes(syncEverything)
 }
+
+/*
+ *  Push current state of everything to Watson IoT.  This will be ran every 
+ *  30 minutes to supplement the data sent by the event handler.
+ */
+def syncEverything() {
+	// Send current state to kick us off
+    for (type in getDeviceTypes()) {
+        for (device in type.value) {
+        	registerDeviceIfNotExists(device)
+        	def data = deviceStateToJson(device, type.key)
+            publishEvent(data)
+        }
+    }
+}
+
 
 /*
  *  This function is called whenever something changes.
@@ -162,10 +176,10 @@ def registerDeviceType() {
 }
 
 /*
- *  Register a new device in Watson IoT
+ *  Register a new device in Watson IoT if it doesn't already exist
  */
-def registerDeviceIfNotExists(deviceId) {
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${deviceId}"
+def registerDeviceIfNotExists(device) {
+	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
 	def headers = ["Authorization": getAuthHeader()]
 
 	def params = [
@@ -179,6 +193,10 @@ def registerDeviceIfNotExists(deviceId) {
     	httpGet(params) { resp ->
         	// The device is already registered
             
+			// Update the location
+			// TODO: Check whether an update is even needed!
+			updateDevice(device)
+			
         	//resp.headers.each {
             //	log.debug "${it.name} : ${it.value}"
         	//}
@@ -192,18 +210,27 @@ def registerDeviceIfNotExists(deviceId) {
     	log.debug "registerDeviceIfNotExists: something went wrong: $e"
         log.debug "registerDeviceIfNotExists: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
         
-        registerDevice(deviceId)
+        registerDevice(device)
 	}
 }
 
 /*
  *  Register a new device in Watson IoT
  */
-def registerDevice(deviceId) {
+def registerDevice(device) {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices"
 	def headers = ["Authorization": getAuthHeader()]
 	def body = [
-    	deviceId: deviceId
+    	deviceId: device.id,
+    	deviceInfo: [
+			descriptiveLocation: location.name,
+			deviceClass: device.name,
+			description: device.label
+		],
+		location: [
+			latitude: location.latitude,
+			longitude: location.longitude
+		]
     ]
     
 	def params = [
@@ -225,6 +252,61 @@ def registerDevice(deviceId) {
 	} catch (e) {
     	log.debug "registerDevice: something went wrong: $e"
         log.debug "registerDevice: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
+	}
+}
+
+/*
+ *  Update the location details in Watson IoT.  This could/should be done more
+ *  intelligently in the future ... we could easy check if there's no change
+ *  instead of blindly updating the location regardless
+ */
+def updateDevice(device) {
+	// Update device info
+	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
+	def headers = ["Authorization": getAuthHeader()]
+	def body = [
+    	deviceInfo: [
+			descriptiveLocation: location.name,
+			deviceClass: device.name,
+			description: device.label
+		]
+    ]
+    
+	def params = [
+		uri: uri,
+		headers: headers,
+        body: body
+	]
+
+	log.debug "updateDevice (1): params=${params}"
+    
+	try {
+    	httpPutJson(params)
+	} catch (e) {
+    	log.debug "updateDevice (1): something went wrong: $e"
+        log.debug "updateDevice (1): watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
+	}
+	
+	// Update location
+	def uri2 = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}/location"
+	def body2 = [
+    	latitude: location.latitude,
+		longitude: location.longitude
+    ]
+    
+	def params2 = [
+		uri: uri2,
+		headers: headers,
+        body: body2
+	]
+
+	log.debug "updateDevice (2): params=${params2}"
+    
+	try {
+    	httpPutJson(params2)
+	} catch (e) {
+    	log.debug "updateDevice (2): something went wrong: $e"
+        log.debug "updateDevice (2): watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
 	}
 }
 
@@ -264,14 +346,13 @@ def publishEvent(evt) {
 }
 
 
-
-/* --- internals --- */
 /*
  *  Devices and Types Dictionary
  */
 def getDeviceTypes(){
 	[ 
 		switch: d_switch, 
+		meter: d_meter, 
 		motion: d_motion, 
 		temperature: d_temperature, 
 		contact: d_contact,
@@ -316,6 +397,9 @@ private deviceStateToJson(device, type) {
 		def s = device.currentState('switch')
 		vd['timestamp'] = s?.isoDate
 		vd['switch'] = s?.value == "on"
+	} else if (type == "meter") {
+		def p = device.currentState('power')
+		vd['power'] = p?.value.toDouble()
 	} else if (type == "motion") {
 		def s = device.currentState('motion')
 		vd['timestamp'] = s?.isoDate
