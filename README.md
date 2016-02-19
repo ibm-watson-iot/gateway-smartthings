@@ -48,6 +48,32 @@ After the setup is complete you should be able to see the application listed whe
   - The longitude and latitude for the center of your geofence is recorded in each device's location record
   - Device metadata updates occur when the application is installed or reconfigured
 
+### Sample
+  
+```json
+  {
+    "clientId": "d:abc123:smartthings:a0c9872a-afad-49e4-8201-3adf98a09c5e",
+    "typeId": "smartthings",
+    "deviceId": "a0c9872a-afad-49e4-8201-3adf98a09c5e",
+    "deviceInfo": {
+      "deviceClass": "Water Leak Sensor",
+      "description": "Bathroom Window",
+      "descriptiveLocation": "Home"
+    },
+    "metadata": {
+      "smartthings": {
+        "bridge": {
+          "version": "0.2.0"
+        },
+        "capabilities": [
+          "temperature",
+          "battery"
+        ]
+      }
+    }
+  }
+```
+
 ![IBM Watson IoT Dashboard](https://raw.githubusercontent.com/ibm-watson-iot/gateway-smartthings/master/docs/dashboard.jpg "IBM Watson IoT Dashboard")
 
 ## Events
