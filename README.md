@@ -1,6 +1,6 @@
 # IoT Gateway Application for Samsung SmartThings
 
-Connect your Samsung SmartThings to Watson IoT.
+Connect your Samsung SmartThings to Watson IoT
 
 - [IBM Watson IoT](https://internetofthings.ibmcloud.com)
 - [Samsung SmartThings](https://www.smartthings.com)
@@ -34,7 +34,7 @@ After the setup is complete you should be able to see the application listed whe
 
 ![SmartApp](https://raw.githubusercontent.com/ibm-watson-iot/gateway-smartthings/master/docs/app.jpg "SmartApp")
 
-## What it Does
+## Metadata and Device Registration
 
 - Devices are automatically registered in Watson IoT
   - All SmartThings are created with a ``typeId`` of ``smartthings``
@@ -43,16 +43,19 @@ After the setup is complete you should be able to see the application listed whe
 - Device metadata is synced to Watson IoT:
   - The custom label you applied to each device is recorded in ``deviceInfo.description``
   - The name of your location is recorded in ``deviceInfo.descriptiveLocation`` (e.g. "My Home")
+  - The version of the bridge is recorded in ``metadata.smartthings.bridge.version``
+  - The capabilities of each device are recorded as an array in ``metadata.smartthings.capabilities``
   - The longitude and latitude for the center of your geofence is recorded in each device's location record
-  - Device metadata updates occur when the application is installed, updated and on a 30 minute interval while the application is running
-- Device events are streamed in real time into Watson IoT
-- In addition to the real time event pass-through, every 30 minutes the current state of all devices is captured and reported to Watson IoT.
+  - Device metadata updates occur when the application is installed or reconfigured
 
 ![IBM Watson IoT Dashboard](https://raw.githubusercontent.com/ibm-watson-iot/gateway-smartthings/master/docs/dashboard.jpg "IBM Watson IoT Dashboard")
 
-### Events
+## Events
 
-State updates are published to Watson IoT in real time and captured every 30 minutes even when no state changes have occured.  The events sent by any device are defined by it's capabilities.  Watson IoT eventId's match 1:1 with SmartThings capabilities, all events are sent in JSON format.  
+- Device events are streamed in real time into Watson IoT
+- In addition to the real time event pass-through, every 5 minutes the current state of all devices is captured and reported to Watson IoT
+
+State updates are published to Watson IoT in real time and captured every 5 minutes even when no state changes have occured.  The events sent by any device are defined by it's capabilities.  Watson IoT eventId's match 1:1 with SmartThings capabilities, all events are sent in JSON format.  
 
 SmartThings often represents boolean (true or false) states as a string (e.g. on|off, active|inactive). The Watson IoT bridge converts these into simple boolean values to ease analytics and rule generation:
 
@@ -64,7 +67,7 @@ SmartThings often represents boolean (true or false) states as a string (e.g. on
 
 If a SmartThings device has multiple capabilities it will emit multiple events into Watson IoT.  For example, a multipurpose sensor will emit up to four different events based on the level of access granted to the bridge application: acceleration, battery, contact & temperature
 
-#### Acceleration Sensor Event
+### Acceleration Sensor Event
 - [SmartThings Capabilities Reference: Acceleration Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#acceleration-sensor)
 ```json
 {
@@ -73,7 +76,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Battery Event
+### Battery Event
 - [SmartThings Capabilities Reference: Battery](http://docs.smartthings.com/en/latest/capabilities-reference.html#battery)
 ```json
 {
@@ -82,7 +85,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Contact Sensor Event
+### Contact Sensor Event
 - [SmartThings Capabilities Reference: Contact Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#contact-sensor)
 ```json
 {
@@ -91,7 +94,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Motion Sensor Event
+### Motion Sensor Event
 - [SmartThings Capabilities Reference: Motion Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#motion-sensor)
 ```json
 {
@@ -100,7 +103,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Power Meter Event
+### Power Meter Event
 - [SmartThings Capabilities Reference: Power Meter](http://docs.smartthings.com/en/latest/capabilities-reference.html#power-meter)
 ```json
 {
@@ -109,7 +112,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Presence Sensor Event
+### Presence Sensor Event
 - [SmartThings Capabilities Reference: Presence Sensor](http://docs.smartthings.com/en/latest/capabilities-reference.html#presence-sensor)
 ```json
 {
@@ -118,7 +121,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Switch Event
+### Switch Event
 - [SmartThings Capabilities Reference: Switch](http://docs.smartthings.com/en/latest/capabilities-reference.html#switch)
 ```json
 {
@@ -127,7 +130,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-#### Temperature Measurement Event
+### Temperature Measurement Event
 - [SmartThings Capabilities Reference: Temperature Measurement](http://docs.smartthings.com/en/latest/capabilities-reference.html#temperature-measurement)
 ```json
 {
@@ -136,9 +139,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-
-
-#### Three Axis Event
+### Three Axis Event
 - [SmartThings Capabilities Reference: Three Axis](http://docs.smartthings.com/en/latest/capabilities-reference.html#three-axis)
 ```json
 {
@@ -149,6 +150,6 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 }
 ```
 
-## What it doesn't do (Yet!)
+## Command Control
 
-- Command control - The bridge only works one way right now, commands can not be sent to SmartThings through the Watson IoT Bridge yet
+The bridge only works one way right now, commands can not be sent to SmartThings through the Watson IoT Bridge yet

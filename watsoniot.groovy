@@ -43,6 +43,11 @@ preferences {
     }
 }
 
+def getSettings() {
+    return [ 
+        version: "0.2.0"
+    ]
+}
 
 /*
  *  This function is called once when the app is installed
@@ -50,7 +55,8 @@ preferences {
 def installed() {
 	log.debug("Application Installing ...")
 	
-	initialize()
+    // Delay the initialization to avoid holding up the install
+	runIn(60, initialize)
 	log.debug("Application Install Complete")
 }
 
@@ -61,7 +67,8 @@ def updated() {
 	log.debug("Application Updating ...")
 	
 	unsubscribe()
-	initialize()
+    // Delay the initialization to avoid holding up the update
+	runIn(60, initialize)
 	log.debug("Application Update Complete")
 }
 
@@ -73,7 +80,28 @@ def initialize() {
 	// This will throw an error after the first time, but good enough for now...
     // TODO: Check if device type already registered
 	registerDeviceType()
-    	
+
+	// Build a map of physical device model (by ID)
+    // Devices with more than one capability will appear multiple times 
+	def deviceList = [:]
+    def deviceCapabilities = [:]
+    
+    for (type in getDeviceTypes()) {
+        for (device in type.value) {
+        	if (deviceList.containsKey(device.id)) {
+            	deviceCapabilities[device.id].add(type.key)
+            } else {
+            	deviceList[device.id] = device	
+        		deviceCapabilities[device.id] = [type.key]
+            }
+        }
+    }
+    
+    for (entry in deviceList) {
+    	def id = entry.key
+		registerDeviceIfNotExists(deviceList[id], deviceCapabilities[id])
+	}
+
 	syncEverything()
 	
     subscribe(d_switch, "switch", "onDeviceEvent")
@@ -87,7 +115,7 @@ def initialize() {
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 	
 	// Register the syncEverything() method to run every 30 minutes
-	runEvery30Minutes(syncEverything)
+	runEvery5Minutes(syncEverything)
 }
 
 /*
@@ -95,10 +123,9 @@ def initialize() {
  *  30 minutes to supplement the data sent by the event handler.
  */
 def syncEverything() {
-	// Send current state to kick us off
+	// Send current state for all capabilities of all devices
     for (type in getDeviceTypes()) {
         for (device in type.value) {
-        	registerDeviceIfNotExists(device)
         	def data = deviceStateToJson(device, type.key)
             publishEvent(data)
         }
@@ -178,7 +205,7 @@ def registerDeviceType() {
 /*
  *  Register a new device in Watson IoT if it doesn't already exist
  */
-def registerDeviceIfNotExists(device) {
+def registerDeviceIfNotExists(device, deviceCapabilities) {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
 	def headers = ["Authorization": getAuthHeader()]
 
@@ -195,7 +222,7 @@ def registerDeviceIfNotExists(device) {
             
 			// Update the location
 			// TODO: Check whether an update is even needed!
-			updateDevice(device)
+			updateDevice(device, deviceCapabilities)
 			
         	//resp.headers.each {
             //	log.debug "${it.name} : ${it.value}"
@@ -210,14 +237,14 @@ def registerDeviceIfNotExists(device) {
     	log.debug "registerDeviceIfNotExists: something went wrong: $e"
         log.debug "registerDeviceIfNotExists: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
         
-        registerDevice(device)
+        registerDevice(device, deviceCapabilities)
 	}
 }
 
 /*
  *  Register a new device in Watson IoT
  */
-def registerDevice(device) {
+def registerDevice(device, deviceCapabilities) {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices"
 	def headers = ["Authorization": getAuthHeader()]
 	def body = [
@@ -230,7 +257,15 @@ def registerDevice(device) {
 		location: [
 			latitude: location.latitude,
 			longitude: location.longitude
-		]
+		],
+        metadata: [
+        	smartthings: [
+            	bridge: [
+                	version: getSettings().version
+                ],
+                capabilities: deviceCapabilities
+            ]
+        ]
     ]
     
 	def params = [
@@ -260,7 +295,7 @@ def registerDevice(device) {
  *  intelligently in the future ... we could easy check if there's no change
  *  instead of blindly updating the location regardless
  */
-def updateDevice(device) {
+def updateDevice(device, deviceCapabilities) {
 	// Update device info
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
 	def headers = ["Authorization": getAuthHeader()]
@@ -269,7 +304,15 @@ def updateDevice(device) {
 			descriptiveLocation: location.name,
 			deviceClass: device.name,
 			description: device.label
-		]
+		],
+        metadata: [
+        	smartthings: [
+            	bridge: [
+                	version: getSettings().version
+                ],
+                capabilities: deviceCapabilities
+            ]
+        ]
     ]
     
 	def params = [
