@@ -45,7 +45,7 @@ preferences {
 
 def getSettings() {
     return [ 
-        version: "0.2.0"
+        version: "0.3.0"
     ]
 }
 
@@ -56,8 +56,9 @@ def installed() {
 	log.debug("Application Installing ...")
 	
     // Delay the initialization to avoid holding up the install
-	runIn(60, initialize)
-	log.debug("Application Install Complete")
+	initialize()
+	
+    log.debug("Application Install Complete")
 }
 
 /*
@@ -67,8 +68,10 @@ def updated() {
 	log.debug("Application Updating ...")
 	
 	unsubscribe()
+    
     // Delay the initialization to avoid holding up the update
-	runIn(60, initialize)
+	initialize()
+    
 	log.debug("Application Update Complete")
 }
 
@@ -81,55 +84,130 @@ def initialize() {
     // TODO: Check if device type already registered
 	registerDeviceType()
 
+    // It may seem a bit roundabout, however: http://community.smartthings.com/t/atomicstate-not-working/27827/5
+    // I believe that the atomicState is only persisted when something on the root object changes. Since this has
+    // to happen immediately, and it could be expensive to watch every single child property/object. So for 
+    // instance in your situation you need to reassign the property on atomicState to the value you changed it to.
+	def deviceIds = []
+	def deviceList = [:]
+	
 	// Build a map of physical device model (by ID)
     // Devices with more than one capability will appear multiple times 
-	def deviceList = [:]
-    def deviceCapabilities = [:]
-    
     for (type in getDeviceTypes()) {
         for (device in type.value) {
         	if (deviceList.containsKey(device.id)) {
-            	deviceCapabilities[device.id].add(type.key)
+            	deviceList[device.id].capabilities.add(type.key)
             } else {
-            	deviceList[device.id] = device	
-        		deviceCapabilities[device.id] = [type.key]
+            	deviceIds.push(device.id)
+            	deviceList[device.id] = [id: device.id, name: device.name, label: device.label, capabilities: [type.key]]	
             }
         }
     }
     
-    for (entry in deviceList) {
-    	def id = entry.key
-		registerDeviceIfNotExists(deviceList[id], deviceCapabilities[id])
-	}
-
-	syncEverything()
-	
-    subscribe(d_switch, "switch", "onDeviceEvent")
-    subscribe(d_meter, "power", "onDeviceEvent")
-	subscribe(d_motion, "motion", "onDeviceEvent")
-	subscribe(d_temperature, "temperature", "onDeviceEvent")
-	subscribe(d_contact, "contact", "onDeviceEvent")
-	subscribe(d_acceleration, "acceleration", "onDeviceEvent")
-	subscribe(d_presence, "presence", "onDeviceEvent")
-	subscribe(d_battery, "battery", "onDeviceEvent")
-	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
+	atomicState.deviceIds = deviceIds
+	atomicState.deviceList = deviceList
+    atomicState.registeredDeviceIds = []
+    
+    // For better user experience delay the device registration process
+    runIn(60, registerDevices)
+    
+	// Disable this for now, introduces timeouts due to taking > 20 seconds when lots of devices are active
+	// syncEverything()
 	
 	// Register the syncEverything() method to run every 30 minutes
-	runEvery5Minutes(syncEverything)
+	// runEvery5Minutes(syncEverything)
+}
+
+def registerDevices() {
+	def maxDeviceRegistrations = 5
+    def loopCounter = 0
+    def deviceIds = atomicState.deviceIds
+    def registeredDeviceIds = atomicState.registeredDeviceIds
+
+    log.info("RegisterDevices() - " + deviceIds.size() + " devices to register.  Registering batches of ${maxDeviceRegistrations}")
+
+	while(deviceIds.size() > 0 && loopCounter < maxDeviceRegistrations) { 
+		def id = deviceIds.pop()
+        def device = atomicState.deviceList[id]
+        
+    	registerDeviceIfNotExists(device)
+    	
+        for (capability in device.capabilities) {
+	        def actualDevice = getDeviceCapability(device.id, capability)
+        	def data = deviceStateToJson(actualDevice, capability)
+        	publishEvent(data)
+	    }
+        
+        registeredDeviceIds.add(id)
+        
+    	loopCounter ++
+    }
+    
+    atomicState.deviceIds = deviceIds
+    atomicState.registeredDeviceIds = registeredDeviceIds
+    
+    // Schedule registration of the next 5 devices
+    if (deviceIds.size() > 0) {
+    	log.info("RegisterDevices() - Device registration will resume in 1 minute")
+    	runIn(60, registerDevices)
+    }
+    else {
+    	log.info("RegisterDevices() - All devices registered, subscribing to device events")
+		runIn(60, subscribeToAll)        
+	}    
+}
+
+
+def subscribeToAll() {
+    subscribe(d_switch, "switch", "onDeviceEvent")
+    subscribe(d_power, "power", "onDeviceEvent")
+    subscribe(d_motion, "motion", "onDeviceEvent")
+    subscribe(d_temperature, "temperature", "onDeviceEvent")
+    subscribe(d_contact, "contact", "onDeviceEvent")
+    subscribe(d_acceleration, "acceleration", "onDeviceEvent")
+    subscribe(d_presence, "presence", "onDeviceEvent")
+    subscribe(d_battery, "battery", "onDeviceEvent")
+    subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 }
 
 /*
- *  Push current state of everything to Watson IoT.  This will be ran every 
- *  30 minutes to supplement the data sent by the event handler.
+ *  Push current state of everything to Watson IoT over time.  Iterations start every 
+ *  30 minutes to supplement the data sent by the event handler.  Each iteration 
+ *  is broken into stages to avoid timeouts if the bridge is working with large 
+ *  numbers of devices.
  */
 def syncEverything() {
-	// Send current state for all capabilities of all devices
-    for (type in getDeviceTypes()) {
-        for (device in type.value) {
-        	def data = deviceStateToJson(device, type.key)
-            publishEvent(data)
-        }
+	def maxDeviceSyncs = 5
+    def loopCounter = 0
+
+    def deviceIds = atomicState.deviceIds
+
+    log.info("syncEverything() - " + deviceIds.size() + " devices to sync.  Syncing batches of ${maxDeviceSyncs}")
+
+	while(deviceIds.size() > 0 && loopCounter < maxDeviceSyncs) { 
+		def id = deviceIds.pop()
+        def device = atomicState.deviceList[id]
+        
+        for (capability in device.capabilities) {
+	        def actualDevice = getDeviceCapability(device.id, capability)
+        	def data = deviceStateToJson(actualDevice, capability)
+        	publishEvent(data)
+	    }
+        
+    	loopCounter ++
     }
+    
+    atomicState.deviceIds = deviceIds
+    
+    // Schedule sync of the next batch of devices
+    if (deviceIds.size() > 0) {
+    	log.info("syncEverything() - Device Sync will resume in 1 minute")
+    	runIn(60, syncEverything)
+    }
+    else {
+    	log.info("syncEverything() - All devices synced, scheduling resync in ~ 30 minutes")
+        runIn(1800, syncEverything)
+	}
 }
 
 
@@ -137,16 +215,8 @@ def syncEverything() {
  *  This function is called whenever something changes.
  */
 def onDeviceEvent(evt) {
-	// log.debug "_on_event XXX event.id=${evt?.id} event.deviceId=${evt?.deviceId} event.isStateChange=${evt?.isStateChange} event.name=${evt?.name}"
-	
-	def dt = getDeviceAndTypeForEvent(evt)
-	if (!dt) {
-		log.debug "onEvent deviceId=${evt.deviceId} not found"
-		return;
-	}
-	
-	def event = deviceStateToJson(dt.device, dt.type)
-	log.debug "onEvent deviceId=${jd}"
+	log.debug "onDeviceEvent(${evt.name} / ${evt.device})"
+	def event = deviceStateToJson(evt.device, evt.name)
 
 	publishEvent(event)
 }
@@ -184,7 +254,7 @@ def registerDeviceType() {
         body: body
 	]
 
-	log.debug "registerDeviceType: params=${params}"
+	log.trace "registerDeviceType: params=${params}"
     
 	try {
     	httpPostJson(params) { resp ->
@@ -205,7 +275,7 @@ def registerDeviceType() {
 /*
  *  Register a new device in Watson IoT if it doesn't already exist
  */
-def registerDeviceIfNotExists(device, deviceCapabilities) {
+def registerDeviceIfNotExists(device) {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
 	def headers = ["Authorization": getAuthHeader()]
 
@@ -214,7 +284,7 @@ def registerDeviceIfNotExists(device, deviceCapabilities) {
 		headers: headers
 	]
 
-	log.debug "registerDeviceIfNotExists: params=${params}"
+	log.trace "registerDeviceIfNotExists: params=${params}"
     
 	try {
     	httpGet(params) { resp ->
@@ -222,7 +292,7 @@ def registerDeviceIfNotExists(device, deviceCapabilities) {
             
 			// Update the location
 			// TODO: Check whether an update is even needed!
-			updateDevice(device, deviceCapabilities)
+			updateDevice(device)
 			
         	//resp.headers.each {
             //	log.debug "${it.name} : ${it.value}"
@@ -234,17 +304,14 @@ def registerDeviceIfNotExists(device, deviceCapabilities) {
         // That's okay, we probably haven't registered the device yet
         // TODO: actually parse the exception and verify it's a "Not Found"
         
-    	log.debug "registerDeviceIfNotExists: something went wrong: $e"
-        log.debug "registerDeviceIfNotExists: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
-        
-        registerDevice(device, deviceCapabilities)
+        registerDevice(device)
 	}
 }
 
 /*
  *  Register a new device in Watson IoT
  */
-def registerDevice(device, deviceCapabilities) {
+def registerDevice(device) {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices"
 	def headers = ["Authorization": getAuthHeader()]
 	def body = [
@@ -263,7 +330,7 @@ def registerDevice(device, deviceCapabilities) {
             	bridge: [
                 	version: getSettings().version
                 ],
-                capabilities: deviceCapabilities
+                capabilities: device.capabilities
             ]
         ]
     ]
@@ -295,7 +362,7 @@ def registerDevice(device, deviceCapabilities) {
  *  intelligently in the future ... we could easy check if there's no change
  *  instead of blindly updating the location regardless
  */
-def updateDevice(device, deviceCapabilities) {
+def updateDevice(device) {
 	// Update device info
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
 	def headers = ["Authorization": getAuthHeader()]
@@ -310,7 +377,7 @@ def updateDevice(device, deviceCapabilities) {
             	bridge: [
                 	version: getSettings().version
                 ],
-                capabilities: deviceCapabilities
+                capabilities: device.capabilities
             ]
         ]
     ]
@@ -321,7 +388,7 @@ def updateDevice(device, deviceCapabilities) {
         body: body
 	]
 
-	log.debug "updateDevice (1): params=${params}"
+	log.trace "updateDevice (1): params=${params}"
     
 	try {
     	httpPutJson(params)
@@ -343,13 +410,12 @@ def updateDevice(device, deviceCapabilities) {
         body: body2
 	]
 
-	log.debug "updateDevice (2): params=${params2}"
+	log.trace "updateDevice (2): params=${params2}"
     
 	try {
     	httpPutJson(params2)
 	} catch (e) {
-    	log.debug "updateDevice (2): something went wrong: $e"
-        log.debug "updateDevice (2): watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
+    	log.warning "updateDevice (2): something went wrong: $e"
 	}
 }
 
@@ -359,17 +425,16 @@ def updateDevice(device, deviceCapabilities) {
  *  See: https://docs.internetofthings.ibmcloud.com/swagger/v0002.html#!/Connectivity/post_application_types_deviceType_devices_deviceId_events_eventName
  */
 def publishEvent(evt) {
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.typeId}"
+	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
-	def body = evt.value
 
 	def params = [
 		uri: uri,
 		headers: headers,
-		body: body
+		body: evt.value
 	]
 
-	log.debug "publishEvent: params=${params}"
+	log.debug "publishEvent: ${evt}"
     
 	try {
     	httpPostJson(params) { resp ->
@@ -395,7 +460,7 @@ def publishEvent(evt) {
 def getDeviceTypes(){
 	[ 
 		switch: d_switch, 
-		meter: d_meter, 
+		power: d_power, 
 		motion: d_motion, 
 		temperature: d_temperature, 
 		contact: d_contact,
@@ -406,68 +471,63 @@ def getDeviceTypes(){
 	]
 }
 
-def getDevicesByType(type) {
-	getDeviceTypes()[type]
+def getDevicesByCapability(capability) {
+	getDeviceTypes()[capability]
 }
 
-def getDeviceAndTypeForEvent(evt) {
-	for (dt in getDeviceTypes()) {
-		if (dt.key != evt.name) {
-			continue
-		}
-		
-		def devices = dt.value
-		for (device in devices) {
-			if (device.id == evt.deviceId) {
-				return [ device: device, type: dt.key ]
-			}
-		}
-	}
+def getDeviceCapability(deviceId, capability) {
+    def devices = getDevicesByCapability(capability)
+    
+    for (device in devices) {
+        if (device.id == deviceId) {
+            return device
+        }
+    }
 }
-
 
 /*
  *  Parsing and conversion of device events
  */
-private deviceStateToJson(device, type) {
+private deviceStateToJson(device, eventName) {
 	if (!device) {
 		return;
 	}
 
 	def vd = [:]
     
-	if (type == "switch") {
+	if (eventName == "switch") {
 		def s = device.currentState('switch')
 		vd['timestamp'] = s?.isoDate
 		vd['switch'] = s?.value == "on"
-	} else if (type == "meter") {
+	} else if (eventName == "power") {
 		def p = device.currentState('power')
+		vd['timestamp'] = s?.isoDate
 		vd['power'] = p?.value.toDouble()
-	} else if (type == "motion") {
+	} else if (eventName == "motion") {
 		def s = device.currentState('motion')
 		vd['timestamp'] = s?.isoDate
 		vd['motion'] = s?.value == "active"
-	} else if (type == "temperature") {
+	} else if (eventName == "temperature") {
 		def s = device.currentState('temperature')
 		vd['timestamp'] = s?.isoDate
 		vd['temperature'] = s?.value.toFloat()
-	} else if (type == "contact") {
+	} else if (eventName == "contact") {
 		def s = device.currentState('contact')
 		vd['timestamp'] = s?.isoDate
 		vd['contact'] = s?.value == "closed"
-	} else if (type == "acceleration") {
+	} else if (eventName == "acceleration") {
 		def s = device.currentState('acceleration')
 		vd['timestamp'] = s?.isoDate
 		vd['acceleration'] = s?.value == "active"
-	} else if (type == "presence") {
+	} else if (eventName == "presence") {
 		def s = device.currentState('presence')
 		vd['timestamp'] = s?.isoDate
 		vd['presence'] = s?.value == "present"
-	} else if (type == "battery") {
+	} else if (eventName == "battery") {
 		def s = device.currentState('battery')
 		vd['timestamp'] = s?.isoDate
 		vd['battery'] = s?.value.toFloat() / 100.0;
-	} else if (type == "threeAxis") {
+	} else if (eventName == "threeAxis") {
 		def s = device.currentState('threeAxis')
 		vd['timestamp'] = s?.isoDate
 		vd['x'] = s?.xyzValue?.x
@@ -475,5 +535,5 @@ private deviceStateToJson(device, type) {
 		vd['z'] = s?.xyzValue?.z
 	}
 	
-    return [typeId: type, deviceId: device.id, description: device.label, value: vd];
+    return [eventId: eventName, deviceId: device.id, value: vd];
 }
