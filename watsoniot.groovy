@@ -494,6 +494,8 @@ private deviceStateToJson(device, eventName) {
 	}
 
 	def vd = [:]
+	
+    	vd['displayName'] = device.displayName
     
 	if (eventName == "switch") {
 		def s = device.currentState('switch')
