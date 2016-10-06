@@ -39,6 +39,7 @@ preferences {
             input(name: "d_presence", type: "capability.presenceSensor", title: "Presence", required: false, multiple: true)
             input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
             input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
+			input(name: "d_waterLeak", type: "capability.waterSensor", title: "Leak", required: false, multiple: true)
         }
     }
 }
@@ -168,6 +169,7 @@ def subscribeToAll() {
     subscribe(d_presence, "presence", "onDeviceEvent")
     subscribe(d_battery, "battery", "onDeviceEvent")
     subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
+	subscribe(d_waterLeak, "water", "onDeviceEvent")
 }
 
 /*
@@ -467,7 +469,8 @@ def getDeviceTypes(){
 		acceleration: d_acceleration,
 		presence: d_presence,
 		battery: d_battery,
-		threeAxis: d_threeAxis
+		threeAxis: d_threeAxis,
+		water: d_waterLeak
 	]
 }
 
@@ -533,7 +536,11 @@ private deviceStateToJson(device, eventName) {
 		vd['x'] = s?.xyzValue?.x
 		vd['y'] = s?.xyzValue?.y
 		vd['z'] = s?.xyzValue?.z
-	}
+	} else if (eventName == "water") {
+		def s = device.currentState('water')
+		vd['timestamp'] = s?.isoDate
+		vd['water'] = s?.value
+	} 
 	
     return [eventId: eventName, deviceId: device.id, value: vd];
 }
