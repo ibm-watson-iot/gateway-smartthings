@@ -175,6 +175,14 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
   "z": 62
 }
 ```
+### Water Leak Event
+- [SmartThings Capabilities Reference: Three Axis](http://docs.smartthings.com/en/latest/capabilities-reference.html#water-sensor)
+```json
+{
+  "timestamp": 	"2016-02-03T14:56:13+00:00", 
+  "water": "wet"
+}
+```
 
 ## Command Control
 
