@@ -90,6 +90,7 @@ SmartThings often represents boolean (true or false) states as a string (e.g. on
 - SmartThings motion state: ``active`` is converted to a motion event with value of ``true``
 - SmartThings presence state: ``present`` is converted to a presence event with value of ``true``
 - SmartThings switch state: ``on`` is converted to a switch event with value of ``true``
+- SmartThings water state: ``wet`` is converted to a water event with value of ``true``
 
 If a SmartThings device has multiple capabilities it will emit multiple events into Watson IoT.  For example, a multipurpose sensor will emit up to four different events based on the level of access granted to the bridge application: acceleration, battery, contact & temperature
 
@@ -180,7 +181,7 @@ If a SmartThings device has multiple capabilities it will emit multiple events i
 ```json
 {
   "timestamp": 	"2016-02-03T14:56:13+00:00", 
-  "water": "wet"
+  "water": true
 }
 ```
 
