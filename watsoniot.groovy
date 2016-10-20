@@ -46,7 +46,7 @@ preferences {
 
 def getSettings() {
 	return [ 
-		version: "0.3.1"
+		version: "0.3.2"
 	]
 }
 
@@ -120,7 +120,7 @@ def initialize() {
 }
 
 def registerDevices() {
-	def maxDeviceRegistrations = 5
+	def maxDeviceRegistrations = 4
 	def loopCounter = 0
 	def deviceIds = atomicState.deviceIds
 	def registeredDeviceIds = atomicState.registeredDeviceIds
@@ -400,7 +400,7 @@ def updateDevice(device) {
 	}
 	
 	// Update location
-	def uri2 = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}/location"
+	def uri2 = "https://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}/location"
 	def body2 = [
 		latitude: location.latitude,
 		longitude: location.longitude
