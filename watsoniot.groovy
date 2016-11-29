@@ -46,7 +46,7 @@ preferences {
 
 def getSettings() {
 	return [ 
-		version: "0.3.2"
+		version: "0.3.3"
 	]
 }
 
@@ -427,7 +427,7 @@ def updateDevice(device) {
  *  See: https://docs.internetofthings.ibmcloud.com/swagger/v0002.html#!/Connectivity/post_application_types_deviceType_devices_deviceId_events_eventName
  */
 def publishEvent(evt) {
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
+	def uri = "https://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
 
 	def params = [
