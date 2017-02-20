@@ -2,7 +2,7 @@
  *  watsoniot.groovy
  *
  *  David Parker
- *  2016-10-18
+ *  2017-02-20
  *
  *  Report SmartThings status to Watson IoT
  *
@@ -46,7 +46,7 @@ preferences {
 
 def getSettings() {
 	return [ 
-		version: "0.3.3"
+		version: "0.4.0"
 	]
 }
 
@@ -89,7 +89,6 @@ def initialize() {
 	// I believe that the atomicState is only persisted when something on the root object changes. Since this has
 	// to happen immediately, and it could be expensive to watch every single child property/object. So for 
 	// instance in your situation you need to reassign the property on atomicState to the value you changed it to.
-	def deviceIds = []
 	def deviceList = [:]
 	
 	// Build a map of physical device model (by ID)
@@ -99,63 +98,22 @@ def initialize() {
 			if (deviceList.containsKey(device.id)) {
 				deviceList[device.id].capabilities.add(type.key)
 			} else {
-				deviceIds.push(device.id)
 				deviceList[device.id] = [id: device.id, name: device.name, label: device.label, capabilities: [type.key]]	
 			}
 		}
 	}
 	
-	atomicState.deviceIds = deviceIds
 	atomicState.deviceList = deviceList
-	atomicState.registeredDeviceIds = []
-	
-	// For better user experience delay the device registration process
-	runIn(60, registerDevices)
-	
-	// Disable this for now, introduces timeouts due to taking > 20 seconds when lots of devices are active
-	// syncEverything()
-	
-	// Register the syncEverything() method to run every 30 minutes
-	// runEvery5Minutes(syncEverything)
+
+    registerDevices()
 }
 
 def registerDevices() {
-	def maxDeviceRegistrations = 4
-	def loopCounter = 0
-	def deviceIds = atomicState.deviceIds
-	def registeredDeviceIds = atomicState.registeredDeviceIds
-
-	log.info("RegisterDevices() - " + deviceIds.size() + " devices to register.  Registering batches of ${maxDeviceRegistrations}")
-
-	while(deviceIds.size() > 0 && loopCounter < maxDeviceRegistrations) { 
-		def id = deviceIds.pop()
-		def device = atomicState.deviceList[id]
-		
-		registerDeviceIfNotExists(device)
-		
-		for (capability in device.capabilities) {
-	        def actualDevice = getDeviceCapability(device.id, capability)
-			def data = deviceStateToJson(actualDevice, capability)
-			publishEvent(data)
-	    }
-		
-		registeredDeviceIds.add(id)
-		
-		loopCounter ++
-	}
-	
-	atomicState.deviceIds = deviceIds
-	atomicState.registeredDeviceIds = registeredDeviceIds
-	
-	// Schedule registration of the next 5 devices
-	if (deviceIds.size() > 0) {
-		log.info("RegisterDevices() - Device registration will resume in 1 minute")
-		runIn(60, registerDevices)
-	}
-	else {
-		log.info("RegisterDevices() - All devices registered, subscribing to device events")
-		runIn(60, subscribeToAll)        
-	}    
+	log.info("RegisterDevices() - " + atomicState.deviceList.size() + " devices to register.")
+    upsertDevices()
+    
+	log.info("RegisterDevices() - All devices registered, subscribing to device events")
+	subscribeToAll()
 }
 
 
@@ -170,46 +128,6 @@ def subscribeToAll() {
 	subscribe(d_battery, "battery", "onDeviceEvent")
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 	subscribe(d_waterLeak, "water", "onDeviceEvent")
-}
-
-/*
- *  Push current state of everything to Watson IoT over time.  Iterations start every 
- *  30 minutes to supplement the data sent by the event handler.  Each iteration 
- *  is broken into stages to avoid timeouts if the bridge is working with large 
- *  numbers of devices.
- */
-def syncEverything() {
-	def maxDeviceSyncs = 5
-	def loopCounter = 0
-
-	def deviceIds = atomicState.deviceIds
-
-	log.info("syncEverything() - " + deviceIds.size() + " devices to sync.  Syncing batches of ${maxDeviceSyncs}")
-
-	while(deviceIds.size() > 0 && loopCounter < maxDeviceSyncs) { 
-		def id = deviceIds.pop()
-		def device = atomicState.deviceList[id]
-		
-		for (capability in device.capabilities) {
-	        def actualDevice = getDeviceCapability(device.id, capability)
-			def data = deviceStateToJson(actualDevice, capability)
-			publishEvent(data)
-	    }
-		
-		loopCounter ++
-	}
-	
-	atomicState.deviceIds = deviceIds
-	
-	// Schedule sync of the next batch of devices
-	if (deviceIds.size() > 0) {
-		log.info("syncEverything() - Device Sync will resume in 1 minute")
-		runIn(60, syncEverything)
-	}
-	else {
-		log.info("syncEverything() - All devices synced, scheduling resync in ~ 30 minutes")
-		runIn(1800, syncEverything)
-	}
 }
 
 
@@ -275,149 +193,56 @@ def registerDeviceType() {
 }
 
 /*
- *  Register a new device in Watson IoT if it doesn't already exist
+ *  Register/Update all devices in Watson IoT
  */
-def registerDeviceIfNotExists(device) {
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
+def upsertDevices() {
+	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/bulk/devices/upsert"
 	def headers = ["Authorization": getAuthHeader()]
-
-	def params = [
-		uri: uri,
-		headers: headers
-	]
-
-	log.trace "registerDeviceIfNotExists: params=${params}"
-	
-	try {
-		httpGet(params) { resp ->
-			// The device is already registered
-			
-			// Update the location
-			// TODO: Check whether an update is even needed!
-			updateDevice(device)
-			
-			//resp.headers.each {
-			//	log.debug "${it.name} : ${it.value}"
-			//}
-			//log.debug "registerDeviceIfNotExists: response data: ${resp.data}"
-			//log.debug "registerDeviceIfNotExists: response contentType: ${resp.contentType}"
-		}
-	} catch (e) {
-		// That's okay, we probably haven't registered the device yet
-		// TODO: actually parse the exception and verify it's a "Not Found"
-		
-		registerDevice(device)
-	}
-}
-
-/*
- *  Register a new device in Watson IoT
- */
-def registerDevice(device) {
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices"
-	def headers = ["Authorization": getAuthHeader()]
-	def body = [
-		deviceId: device.id,
-		deviceInfo: [
-			descriptiveLocation: location.name,
-			deviceClass: device.name,
-			description: device.label
-		],
-		location: [
-			latitude: location.latitude,
-			longitude: location.longitude
-		],
-		metadata: [
-			smartthings: [
-				bridge: [
-					version: getSettings().version
-				],
-				capabilities: device.capabilities
+	def body = []
+    
+    // Build a single upsert statement 
+    def deviceList = atomicState.deviceList
+    
+    for (deviceEntry in deviceList) {
+    	def device = deviceEntry.value
+        def deviceUpsert = [
+        	deviceId: device.id,
+            typeId: "smartthings",
+			deviceInfo: [
+				descriptiveLocation: location.name,
+				deviceClass: device.name,
+				description: device.label
+			],
+			location: [
+				latitude: location.latitude,
+				longitude: location.longitude
+			],
+			metadata: [
+				smartthings: [
+					bridge: [
+						version: getSettings().version
+					],
+					capabilities: device.capabilities
+				]
 			]
 		]
-	]
-	
+        // Now add the record to our request body array
+        body.push(deviceUpsert)
+	}
+    
 	def params = [
 		uri: uri,
 		headers: headers,
 		body: body
 	]
 
-	log.debug "registerDevice: params=${params}"
+	log.trace "upsertDevices: params=${params}"
 	
 	try {
-		httpPostJson(params) { resp ->
-			//resp.headers.each {
-			//	log.debug "${it.name} : ${it.value}"
-			//}
-			//log.debug "registerDevice: response data: ${resp.data}"
-			//log.debug "registerDevice: response contentType: ${resp.contentType}"
-		}
+		httpPostJson(params)
 	} catch (e) {
-		log.debug "registerDevice: something went wrong: $e"
-		log.debug "registerDevice: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
-	}
-}
-
-/*
- *  Update the location details in Watson IoT.  This could/should be done more
- *  intelligently in the future ... we could easy check if there's no change
- *  instead of blindly updating the location regardless
- */
-def updateDevice(device) {
-	// Update device info
-	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}"
-	def headers = ["Authorization": getAuthHeader()]
-	def body = [
-		deviceInfo: [
-			descriptiveLocation: location.name,
-			deviceClass: device.name,
-			description: device.label
-		],
-		metadata: [
-			smartthings: [
-				bridge: [
-					version: getSettings().version
-				],
-				capabilities: device.capabilities
-			]
-		]
-	]
-	
-	def params = [
-		uri: uri,
-		headers: headers,
-		body: body
-	]
-
-	log.trace "updateDevice (1): params=${params}"
-	
-	try {
-		httpPutJson(params)
-	} catch (e) {
-		log.debug "updateDevice (1): something went wrong: $e"
-		log.debug "updateDevice (1): watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
-	}
-	
-	// Update location
-	def uri2 = "https://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/device/types/smartthings/devices/${device.id}/location"
-	def body2 = [
-		latitude: location.latitude,
-		longitude: location.longitude
-	]
-	
-	def params2 = [
-		uri: uri2,
-		headers: headers,
-		body: body2
-	]
-
-	log.trace "updateDevice (2): params=${params2}"
-	
-	try {
-		httpPutJson(params2)
-	} catch (e) {
-		log.warning "updateDevice (2): something went wrong: $e"
+		log.debug "upsertDevices: something went wrong: $e"
+		log.debug "upsertDevices: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
 	}
 }
 
@@ -425,9 +250,15 @@ def updateDevice(device) {
 /*
  *  Send information to Watson IoT
  *  See: https://docs.internetofthings.ibmcloud.com/swagger/v0002.html#!/Connectivity/post_application_types_deviceType_devices_deviceId_events_eventName
+ * 
+ *  Note on use of HTTP -- Unfortunately Samsung SmartThings Platform only supports TLS1.0, and Watson
+ *  IoT Platform requires TLS1.1 or 1.2 .. yes, it's silly but that's the position we're in :)
+ *  a) SmartThings does not support modern TLS
+ *  b) Watson IoT Platform allows unencrypted, but does not allow an older version of
+ *     TLS (which is still more secure than unencrypted) 
  */
 def publishEvent(evt) {
-	def uri = "https://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
+	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
 
 	def params = [
@@ -447,11 +278,7 @@ def publishEvent(evt) {
 			//log.debug "publishEvent: response contentType: ${resp.contentType}"
 		}
 	} catch (e) {
-		// Watson IoT HTTP API does not return a body so this exception is thrown on EVERY event because SmartThings
-		// can't be configured to cope with a no body response as far as I can tell.
-		
-		//log.debug "publishEvent: something went wrong: $e"
-		//log.debug "publishEvent: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
+		log.debug "publishEvent: something went wrong: $e"
 	}
 }
 
