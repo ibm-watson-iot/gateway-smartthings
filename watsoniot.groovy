@@ -31,7 +31,7 @@ preferences {
 	page(name: "access_cfg", title: "Configure Device Access", install:true) {
 		section("Allow Watson IoT to Access These Things ...") {
 			input(name: "d_switch", type: "capability.switch", title: "Switch", required: false, multiple: true)
-			input(name: "d_meter", type: "capability.powerMeter", title: "Power Meter", required: false, multiple: true)
+			input(name: "d_power", type: "capability.powerMeter", title: "Power Meter", required: false, multiple: true)
 			input(name: "d_motion", type: "capability.motionSensor", title: "Motion", required: false, multiple: true)
 			input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperature", required: false, multiple: true)
 			input(name: "d_contact", type: "capability.contactSensor", title: "Contact", required: false, multiple: true)
@@ -330,9 +330,9 @@ private deviceStateToJson(device, eventName) {
 		vd['timestamp'] = s?.isoDate
 		vd['switch'] = s?.value == "on"
 	} else if (eventName == "power") {
-		def p = device.currentState('power')
+		def s = device.currentState('power')
 		vd['timestamp'] = s?.isoDate
-		vd['power'] = p?.value.toDouble()
+		vd['power'] = s?.value.toDouble()
 	} else if (eventName == "motion") {
 		def s = device.currentState('motion')
 		vd['timestamp'] = s?.isoDate
