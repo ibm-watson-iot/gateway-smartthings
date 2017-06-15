@@ -11,8 +11,8 @@
  
 definition(
 	name: "IBM Watson IoT Bridge",
-	namespace: "",
-	author: "David Parker",
+	namespace: "smartyiot",
+	author: "Cesar Fong",
 	description: "Bridge from SmartThings to IBM Watson IoT",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
@@ -21,21 +21,21 @@ definition(
 )
 
 preferences {
-	page(name: "watson_cfg", title: "Configure Target Organization", nextPage: "access_cfg", install:false) {
-		section("Watson IoT Configuration ...") {
+	page(name: "watson_cfg", title: "Configurar Organización Destino", nextPage: "access_cfg", install:false) {
+		section("Configuracion Watson IoT:") {
 			input(name: "watson_iot_org", title: "Organization ID", required: true)
 			input(name: "watson_iot_api_key", title: "API Key", required: true)
 			input(name: "watson_iot_api_token", title: "Authorization Token", required: true)
 		}
 	}
-	page(name: "access_cfg", title: "Configure Device Access", install:true) {
-		section("Allow Watson IoT to Access These Things ...") {
+	page(name: "access_cfg", title: "Configurar Acceso Dispositivos", install:true) {
+		section("Permitir Watson IoT que accede a estos dispositivos ...") {
 			input(name: "d_switch", type: "capability.switch", title: "Switch", required: false, multiple: true)
-			input(name: "d_power", type: "capability.powerMeter", title: "Power Meter", required: false, multiple: true)
+			input(name: "d_power", type: "capability.powerMeter", title: "Medidor Energia", required: false, multiple: true)
 			input(name: "d_motion", type: "capability.motionSensor", title: "Motion", required: false, multiple: true)
-			input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperature", required: false, multiple: true)
-			input(name: "d_contact", type: "capability.contactSensor", title: "Contact", required: false, multiple: true)
-			input(name: "d_acceleration", type: "capability.accelerationSensor", title: "Acceleration", required: false, multiple: true)
+			input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperatura", required: false, multiple: true)
+			input(name: "d_contact", type: "capability.contactSensor", title: "Contacto", required: false, multiple: true)
+			input(name: "d_acceleration", type: "capability.accelerationSensor", title: "Aceleracion", required: false, multiple: true)
 			input(name: "d_presence", type: "capability.presenceSensor", title: "Presence", required: false, multiple: true)
 			input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
 			input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
@@ -177,13 +177,13 @@ def registerDeviceType() {
 	log.trace "registerDeviceType: params=${params}"
 	
 	try {
-		httpPostJson(params) { resp ->
+		httpPostJson(params)// { resp ->
 			//resp.headers.each {
 			//	log.debug "${it.name} : ${it.value}"
 			//}
 			//log.debug "registerDeviceType: response data: ${resp.data}"
 			//log.debug "registerDeviceType: response contentType: ${resp.contentType}"
-		}
+		//}
 	} catch (e) {
 		// It's probably OK, we've likely already registered the "smartthings" device type
 		
@@ -258,25 +258,24 @@ def upsertDevices() {
  *     TLS (which is still more secure than unencrypted) 
  */
 def publishEvent(evt) {
-	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
+	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com:1883/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
-
 	def params = [
 		uri: uri,
 		headers: headers,
 		body: evt.value
 	]
-
+	log.debug "params: ${params}"
 	log.debug "publishEvent: ${evt}"
 	
 	try {
-		httpPostJson(params) { resp ->
+		httpPostJson(params) //{ resp ->
 			//resp.headers.each {
 			//	log.debug "${it.name} : ${it.value}"
 			//}
 			//log.debug "publishEvent: response data: ${resp.data}"
 			//log.debug "publishEvent: response contentType: ${resp.contentType}"
-		}
+		//}
 	} catch (e) {
 		log.debug "publishEvent: something went wrong: $e"
 	}
