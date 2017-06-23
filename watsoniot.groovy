@@ -11,8 +11,8 @@
  
 definition(
 	name: "IBM Watson IoT Bridge",
-	namespace: "smartyiot",
-	author: "Cesar Fong",
+	namespace: "",
+	author: "David Parker",
 	description: "Bridge from SmartThings to IBM Watson IoT",
 	category: "My Apps",
 	iconUrl: "https://s3.amazonaws.com/smartapp-icons/Convenience/Cat-Convenience.png",
@@ -21,32 +21,33 @@ definition(
 )
 
 preferences {
-	page(name: "watson_cfg", title: "Configurar Organización Destino", nextPage: "access_cfg", install:false) {
-		section("Configuracion Watson IoT:") {
+	page(name: "watson_cfg", title: "Configure Target Organization", nextPage: "access_cfg", install:false) {
+		section("Watson IoT Configuration ...") {
 			input(name: "watson_iot_org", title: "Organization ID", required: true)
 			input(name: "watson_iot_api_key", title: "API Key", required: true)
 			input(name: "watson_iot_api_token", title: "Authorization Token", required: true)
 		}
 	}
-	page(name: "access_cfg", title: "Configurar Acceso Dispositivos", install:true) {
-		section("Permitir Watson IoT que accede a estos dispositivos ...") {
+	page(name: "access_cfg", title: "Configure Device Access", install:true) {
+		section("Allow Watson IoT to Access These Things ...") {
 			input(name: "d_switch", type: "capability.switch", title: "Switch", required: false, multiple: true)
-			input(name: "d_power", type: "capability.powerMeter", title: "Medidor Energia", required: false, multiple: true)
+			input(name: "d_meter", type: "capability.powerMeter", title: "Power Meter", required: false, multiple: true)
 			input(name: "d_motion", type: "capability.motionSensor", title: "Motion", required: false, multiple: true)
-			input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperatura", required: false, multiple: true)
-			input(name: "d_contact", type: "capability.contactSensor", title: "Contacto", required: false, multiple: true)
-			input(name: "d_acceleration", type: "capability.accelerationSensor", title: "Aceleracion", required: false, multiple: true)
+			input(name: "d_temperature", type: "capability.temperatureMeasurement", title: "Temperature", required: false, multiple: true)
+			input(name: "d_contact", type: "capability.contactSensor", title: "Contact", required: false, multiple: true)
+			input(name: "d_acceleration", type: "capability.accelerationSensor", title: "Acceleration", required: false, multiple: true)
 			input(name: "d_presence", type: "capability.presenceSensor", title: "Presence", required: false, multiple: true)
 			input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
 			input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
 			input(name: "d_waterLeak", type: "capability.waterSensor", title: "Leak", required: false, multiple: true)
+            		input(name: "d_energy", type: "capability.energyMeter", title: "Energy Meter", required: false, multiple: true)
 		}
 	}
 }
 
 def getSettings() {
 	return [ 
-		version: "0.4.0"
+		version: "0.4.1"
 	]
 }
 
@@ -128,6 +129,7 @@ def subscribeToAll() {
 	subscribe(d_battery, "battery", "onDeviceEvent")
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 	subscribe(d_waterLeak, "water", "onDeviceEvent")
+    	subscribe(d_energy, "energy", "onDeviceEvent")
 }
 
 
@@ -177,7 +179,7 @@ def registerDeviceType() {
 	log.trace "registerDeviceType: params=${params}"
 	
 	try {
-		httpPostJson(params)// { resp ->
+		httpPostJson(params) //{ resp ->
 			//resp.headers.each {
 			//	log.debug "${it.name} : ${it.value}"
 			//}
@@ -260,12 +262,13 @@ def upsertDevices() {
 def publishEvent(evt) {
 	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com:1883/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
+
 	def params = [
 		uri: uri,
 		headers: headers,
 		body: evt.value
 	]
-	log.debug "params: ${params}"
+
 	log.debug "publishEvent: ${evt}"
 	
 	try {
@@ -296,7 +299,8 @@ def getDeviceTypes(){
 		presence: d_presence,
 		battery: d_battery,
 		threeAxis: d_threeAxis,
-		water: d_waterLeak
+		water: d_waterLeak,
+        	energy: d_energy        
 	]
 }
 
@@ -332,6 +336,10 @@ private deviceStateToJson(device, eventName) {
 		def s = device.currentState('power')
 		vd['timestamp'] = s?.isoDate
 		vd['power'] = s?.value.toDouble()
+    } else if (eventName == "energy") {
+		def s = device.currentState('energy')
+		vd['timestamp'] = s?.isoDate
+		vd['energy'] = s?.value.toDouble() 
 	} else if (eventName == "motion") {
 		def s = device.currentState('motion')
 		vd['timestamp'] = s?.isoDate
