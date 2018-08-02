@@ -40,14 +40,14 @@ preferences {
 			input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
 			input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
 			input(name: "d_waterLeak", type: "capability.waterSensor", title: "Leak", required: false, multiple: true)
-            		input(name: "d_energy", type: "capability.energyMeter", title: "Energy Meter", required: false, multiple: true)
+			input(name: "d_energy", type: "capability.energyMeter", title: "Energy Meter", required: false, multiple: true)
 		}
 	}
 }
 
 def getSettings() {
 	return [ 
-		version: "0.4.1"
+		version: "0.4.2"
 	]
 }
 
@@ -55,26 +55,25 @@ def getSettings() {
  *  This function is called once when the app is installed
  */
 def installed() {
-	log.debug("Application Installing ...")
+	log.debug("IBM Watson IoT Bridge Installing ...")
 	
-	// Delay the initialization to avoid holding up the install
 	initialize()
 	
-	log.debug("Application Install Complete")
+	log.debug("IBM Watson IoT Bridge Install Complete")
+	sendEvent(descriptionText:"IBM Watson IoT Bridge Installed", eventType:"SOLUTION_EVENT", displayed: true)
 }
 
 /*
  *  This function is called every time the user changes their preferences
  */
 def updated() {
-	log.debug("Application Updating ...")
-	
+	log.debug("IBM Watson IoT Bridge Updating ...")
 	unsubscribe()
 	
-	// Delay the initialization to avoid holding up the update
 	initialize()
 	
-	log.debug("Application Update Complete")
+	log.debug("IBM Watson IoT Bridge Update Complete")
+	sendEvent(descriptionText:"IBM Watson IoT Bridge Updated", eventType:"SOLUTION_EVENT", displayed: true)
 }
 
 
@@ -105,14 +104,14 @@ def initialize() {
 	}
 	
 	atomicState.deviceList = deviceList
-
-    registerDevices()
+	
+	registerDevices()
 }
 
 def registerDevices() {
 	log.info("RegisterDevices() - " + atomicState.deviceList.size() + " devices to register.")
-    upsertDevices()
-    
+	upsertDevices()
+	
 	log.info("RegisterDevices() - All devices registered, subscribing to device events")
 	subscribeToAll()
 }
@@ -129,7 +128,7 @@ def subscribeToAll() {
 	subscribe(d_battery, "battery", "onDeviceEvent")
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 	subscribe(d_waterLeak, "water", "onDeviceEvent")
-    	subscribe(d_energy, "energy", "onDeviceEvent")
+	subscribe(d_energy, "energy", "onDeviceEvent")
 }
 
 
@@ -139,7 +138,7 @@ def subscribeToAll() {
 def onDeviceEvent(evt) {
 	log.debug "onDeviceEvent(${evt.name} / ${evt.device})"
 	def event = deviceStateToJson(evt.device, evt.name)
-
+	
 	publishEvent(event)
 }
 
@@ -201,15 +200,15 @@ def upsertDevices() {
 	def uri = "https://${watson_iot_org}.internetofthings.ibmcloud.com/api/v0002/bulk/devices/upsert"
 	def headers = ["Authorization": getAuthHeader()]
 	def body = []
-    
-    // Build a single upsert statement 
-    def deviceList = atomicState.deviceList
-    
-    for (deviceEntry in deviceList) {
-    	def device = deviceEntry.value
-        def deviceUpsert = [
-        	deviceId: device.id,
-            typeId: "smartthings",
+	
+	// Build a single upsert statement 
+	def deviceList = atomicState.deviceList
+	
+	for (deviceEntry in deviceList) {
+		def device = deviceEntry.value
+		def deviceUpsert = [
+			deviceId: device.id,
+			typeId: "smartthings",
 			deviceInfo: [
 				descriptiveLocation: location.name,
 				deviceClass: device.name,
@@ -228,24 +227,27 @@ def upsertDevices() {
 				]
 			]
 		]
-        // Now add the record to our request body array
-        body.push(deviceUpsert)
+		// Now add the record to our request body array
+		body.push(deviceUpsert)
+		log.trace("Device to upsert: " + deviceUpsert)
 	}
-    
+	
 	def params = [
 		uri: uri,
 		headers: headers,
 		body: body
 	]
 
-	log.trace "upsertDevices: params=${params}"
+	log.trace "upsertDevices: ${params.uri}"
 	
 	try {
 		httpPostJson(params)
 	} catch (e) {
-		log.debug "upsertDevices: something went wrong: $e"
-		log.debug "upsertDevices: watson_iot_api_key=${watson_iot_api_key},watson_iot_api_token=${watson_iot_api_token}"
+		log.debug "upsertDevices: Something went wrong: $e"
 	}
+	
+	log.debug("upsertDevices: Completed")
+	sendEvent(descriptionText:"IBM Watson IoT Device Metadata Updated", eventType:"SOLUTION_EVENT", displayed: true)
 }
 
 
@@ -260,7 +262,7 @@ def upsertDevices() {
  *     TLS (which is still more secure than unencrypted) 
  */
 def publishEvent(evt) {
-	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com:1883/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
+	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
 
 	def params = [
@@ -300,7 +302,7 @@ def getDeviceTypes(){
 		battery: d_battery,
 		threeAxis: d_threeAxis,
 		water: d_waterLeak,
-        	energy: d_energy        
+		energy: d_energy
 	]
 }
 
@@ -325,7 +327,7 @@ private deviceStateToJson(device, eventName) {
 	if (!device) {
 		return;
 	}
-
+	
 	def vd = [:]
 	
 	if (eventName == "switch") {
@@ -336,7 +338,7 @@ private deviceStateToJson(device, eventName) {
 		def s = device.currentState('power')
 		vd['timestamp'] = s?.isoDate
 		vd['power'] = s?.value.toDouble()
-    } else if (eventName == "energy") {
+	} else if (eventName == "energy") {
 		def s = device.currentState('energy')
 		vd['timestamp'] = s?.isoDate
 		vd['energy'] = s?.value.toDouble() 
