@@ -40,13 +40,14 @@ preferences {
 			input(name: "d_battery", type: "capability.battery", title: "Battery", required: false, multiple: true)
 			input(name: "d_threeAxis", type: "capability.threeAxis", title: "3 Axis", required: false, multiple: true)
 			input(name: "d_waterLeak", type: "capability.waterSensor", title: "Leak", required: false, multiple: true)
+            		input(name: "d_energy", type: "capability.energyMeter", title: "Energy Meter", required: false, multiple: true)
 		}
 	}
 }
 
 def getSettings() {
 	return [ 
-		version: "0.4.0"
+		version: "0.4.1"
 	]
 }
 
@@ -128,6 +129,7 @@ def subscribeToAll() {
 	subscribe(d_battery, "battery", "onDeviceEvent")
 	subscribe(d_threeAxis, "threeAxis", "onDeviceEvent")
 	subscribe(d_waterLeak, "water", "onDeviceEvent")
+    	subscribe(d_energy, "energy", "onDeviceEvent")
 }
 
 
@@ -177,13 +179,13 @@ def registerDeviceType() {
 	log.trace "registerDeviceType: params=${params}"
 	
 	try {
-		httpPostJson(params) { resp ->
+		httpPostJson(params) //{ resp ->
 			//resp.headers.each {
 			//	log.debug "${it.name} : ${it.value}"
 			//}
 			//log.debug "registerDeviceType: response data: ${resp.data}"
 			//log.debug "registerDeviceType: response contentType: ${resp.contentType}"
-		}
+		//}
 	} catch (e) {
 		// It's probably OK, we've likely already registered the "smartthings" device type
 		
@@ -258,7 +260,7 @@ def upsertDevices() {
  *     TLS (which is still more secure than unencrypted) 
  */
 def publishEvent(evt) {
-	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
+	def uri = "http://${watson_iot_org}.messaging.internetofthings.ibmcloud.com:1883/api/v0002/application/types/smartthings/devices/${evt.deviceId}/events/${evt.eventId}"
 	def headers = ["Authorization": getAuthHeader()]
 
 	def params = [
@@ -270,13 +272,13 @@ def publishEvent(evt) {
 	log.debug "publishEvent: ${evt}"
 	
 	try {
-		httpPostJson(params) { resp ->
+		httpPostJson(params) //{ resp ->
 			//resp.headers.each {
 			//	log.debug "${it.name} : ${it.value}"
 			//}
 			//log.debug "publishEvent: response data: ${resp.data}"
 			//log.debug "publishEvent: response contentType: ${resp.contentType}"
-		}
+		//}
 	} catch (e) {
 		log.debug "publishEvent: something went wrong: $e"
 	}
@@ -297,7 +299,8 @@ def getDeviceTypes(){
 		presence: d_presence,
 		battery: d_battery,
 		threeAxis: d_threeAxis,
-		water: d_waterLeak
+		water: d_waterLeak,
+        	energy: d_energy        
 	]
 }
 
@@ -330,9 +333,13 @@ private deviceStateToJson(device, eventName) {
 		vd['timestamp'] = s?.isoDate
 		vd['switch'] = s?.value == "on"
 	} else if (eventName == "power") {
-		def p = device.currentState('power')
+		def s = device.currentState('power')
 		vd['timestamp'] = s?.isoDate
-		vd['power'] = p?.value.toDouble()
+		vd['power'] = s?.value.toDouble()
+    } else if (eventName == "energy") {
+		def s = device.currentState('energy')
+		vd['timestamp'] = s?.isoDate
+		vd['energy'] = s?.value.toDouble() 
 	} else if (eventName == "motion") {
 		def s = device.currentState('motion')
 		vd['timestamp'] = s?.isoDate
