@@ -87,9 +87,8 @@ After the setup is complete you should be able to see the application listed whe
 ## Events
 
 - Device events are streamed in real time into Watson IoT
-- In addition to the real time event pass-through, every 5 minutes the current state of all devices is captured and reported to Watson IoT
 
-State updates are published to Watson IoT in real time and captured every 5 minutes even when no state changes have occured.  The events sent by any device are defined by it's capabilities.  Watson IoT eventId's match 1:1 with SmartThings capabilities, all events are sent in JSON format.  
+State updates are published to Watson IoT in real time.  The events sent by any device are defined by it's capabilities.  Watson IoT eventId's match 1:1 with SmartThings capabilities, all events are sent in JSON format.  
 
 SmartThings often represents boolean (true or false) states as a string (e.g. on|off, active|inactive). The Watson IoT bridge converts these into simple boolean values to ease analytics and rule generation:
 
