@@ -20,7 +20,15 @@ Using the SmartThings mobile application navigate to ``Marketplace > SmartApps >
 
 ### Configure Target Organization
 
-You will need to have generated an API key from your Watson IoT dashboard (or have been provided one by whoever oversees the Watson IoT organization you wish to connect to)
+You will need to have generated an API key from your Watson IoT dashboard (or have been provided one by whoever oversees the Watson IoT organization you wish to connect to).  
+
+The API key requires the following permissions:
+- Create Devices
+- Update Devices
+- View Devices
+- Publish/send an event
+
+Of the default roles, both `Standard Application` and `Backend Trusted Application` are suitable for use with this application, providing the abilty to register devices and submit events on behalf of devices.
 
 ![SmartApp Configuration 1](https://raw.githubusercontent.com/ibm-watson-iot/gateway-smartthings/master/docs/app_cfg_1.jpg "SmartApp Configuration 1")
 
